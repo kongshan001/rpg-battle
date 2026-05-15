@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚔ RPG 回合制战斗</title>
+<style>
+:root {
+  --bg:#0f0e17;--surface:#1a1a2e;--surface2:#222240;--border:#333366;
+  --text:#e0e0f0;--muted:#8888aa;
+  --hp:#ff4757;--mp:#3742fa;--exp:#ffa502;
+  --warrior:#ff6348;--mage:#5352ed;--ranger:#2ed573;
+  --combo:#ffd700;--weather:#70a1ff;
+  --fire:#ff4500;--ice:#00bfff;--lightning:#ffd700;--wind:#00fa9a;--earth:#cd853f;--dark:#8b008b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh}
+.app{max-width:1100px;margin:0 auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+
+/* Top bar */
+.top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 14px;background:var(--surface);border-radius:8px;flex-wrap:wrap;gap:6px}
+.top-bar h1{font-size:17px}
+.tags{display:flex;gap:4px;flex-wrap:wrap}
+.tag{padding:1px 6px;border-radius:3px;font-size:10px;background:var(--surface2);border:1px solid var(--border)}
+
+/* Panels */
+.panel{background:var(--surface);border-radius:8px;padding:12px;border:1px solid var(--border)}
+.panel-title{font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+
+/* Grid */
+.main-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bottom-grid{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+
+/* Create screen */
+.create-screen{grid-column:1/-1;text-align:center;padding:32px 16px}
+.create-screen h2{font-size:26px;margin-bottom:6px}
+.create-screen p{color:var(--muted);margin-bottom:20px;font-size:14px}
+.class-cards{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.class-card{background:var(--surface2);border:2px solid var(--border);border-radius:12px;padding:20px 28px;cursor:pointer;transition:all .2s;width:170px}
+.class-card:hover{transform:translateY(-4px)}
+.class-card .icon{font-size:34px;margin-bottom:6px}
+.class-card .name{font-size:17px;font-weight:bold;margin-bottom:3px}
+.class-card .desc{font-size:11px;color:var(--muted)}
+.class-card .stats-preview{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5}
+
+/* Character header */
+.char-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.char-icon{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px}
+.char-info .char-name{font-size:15px;font-weight:bold}
+.char-info .char-class{font-size:11px;color:var(--muted)}
+
+/* Bars */
+.bar-group{margin-bottom:6px}
+.bar-label{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px}
+.bar{height:14px;background:var(--surface2);border-radius:7px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:7px;transition:width .4s ease}
+.bar-fill.hp{background:linear-gradient(90deg,#ff4757,#ff6b81)}
+.bar-fill.mp{background:linear-gradient(90deg,#3742fa,#5352ed)}
+.bar-fill.exp{background:linear-gradient(90deg,#ffa502,#ffc048)}
+.bar-fill.enemy-hp{background:linear-gradient(90deg,#ff4757,#c0392b)}
+
+/* Stats */
+.stats-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.stat{background:var(--surface2);padding:2px 7px;border-radius:3px;font-size:10px}
+.stat .val{color:var(--combo);font-weight:bold}
+
+/* Enemy */
+.enemy-panel{border-color:#5c2020}
+.enemy-name{font-size:16px;font-weight:bold;margin-bottom:4px}
+.enemy-sprite{text-align:center;font-size:56px;margin:6px 0;filter:drop-shadow(0 0 8px rgba(255,71,87,.5));transition:all .3s}
+.enemy-sprite.hurt{animation:shake .3s}
+.enemy-sprite.dead{filter:grayscale(1) opacity(.3)}
+
+/* Animations */
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes comboFlash{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* Buttons */
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.btn{padding:9px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;transition:all .15s;color:#fff}
+.btn:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.15)}
+.btn:active:not(:disabled){transform:translateY(0)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-attack{background:linear-gradient(135deg,#ff4757,#c0392b)}
+.btn-defend{background:linear-gradient(135deg,#3742fa,#2f3542)}
+.btn-skill{background:linear-gradient(135deg,#5352ed,#8b5cf6)}
+.btn-next{background:linear-gradient(135deg,#ffa502,#e67e22);width:100%}
+.btn-reset{background:var(--surface2);border:1px solid var(--border)}
+
+/* Log */
+.log-panel{max-height:190px;overflow-y:auto}
+.log-entry{padding:3px 0;font-size:11px;border-bottom:1px solid var(--surface2);animation:fadeIn .3s}
+.log-entry.dmg{color:var(--hp)}
+.log-entry.heal{color:#2ed573}
+.log-entry.combo{color:var(--combo)}
+.log-entry.weather{color:var(--weather)}
+.log-entry.victory{color:#ffd700;font-weight:bold}
+.log-entry.defeat{color:#ff4757;font-weight:bold}
+.log-entry.turn{color:var(--muted);font-size:10px}
+
+/* Info boxes */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.info-box{background:var(--surface2);border-radius:6px;padding:7px}
+.info-box .label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.info-box .value{font-size:15px;font-weight:bold}
+
+/* Weather */
+.weather-icon{font-size:28px;text-align:center}
+.weather-name{font-size:12px;font-weight:bold;text-align:center;margin-top:2px}
+.weather-effect{font-size:9px;color:var(--muted);text-align:center;margin-top:1px}
+
+/* Combo */
+.combo-count{font-size:32px;font-weight:bold;color:var(--combo);text-align:center}
+.combo-count.flash{animation:comboFlash .3s}
+.combo-label{font-size:10px;color:var(--muted);text-align:center}
+.combo-mult{font-size:11px;color:var(--combo);text-align:center}
+
+/* Cooldown skills */
+.skill-slots{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.skill-slot{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:10px;min-width:60px;text-align:center}
+.skill-slot.ready{border-color:#2ed573;cursor:pointer}
+.skill-slot.ready:hover{background:#2ed57322}
+.skill-slot.on-cd{opacity:.45}
+.skill-slot .sname{font-weight:bold}
+.skill-slot .cd-txt{color:var(--hp);font-size:12px;font-weight:bold}
+
+/* Enemy select */
+.enemy-select{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.enemy-btn{background:var(--surface2);border:2px solid var(--border);border-radius:10px;padding:12px;cursor:pointer;transition:all .2s;text-align:center;width:110px}
+.enemy-btn:hover{border-color:var(--hp);transform:translateY(-3px)}
+.enemy-btn .emoji{font-size:28px}
+.enemy-btn .name{font-size:12px;margin-top:3px;font-weight:bold}
+.enemy-btn .stats{font-size:9px;color:var(--muted);line-height:1.4}
+
+/* Overlay */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .4s}
+.overlay-card{background:var(--surface);border-radius:14px;padding:28px 40px;text-align:center;max-width:380px}
+.overlay-card.victory{border:2px solid var(--combo)}
+.overlay-card.defeat{border:2px solid var(--hp)}
+.overlay-card h2{font-size:26px;margin-bottom:10px}
+.overlay-card .rewards{margin:10px 0;font-size:13px;color:var(--muted)}
+.overlay-card .rewards div{margin:3px 0}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--surface2)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Responsive */
+@media(max-width:768px){
+  .main-grid,.bottom-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top-bar">
+    <h1>⚔ RPG 回合制战斗</h1>
+    <div class="tags">
+      <span class="tag">🎮 战斗</span><span class="tag">🔥 元素</span><span class="tag">⚡ 连击</span>
+      <span class="tag">❄ 冷却</span><span class="tag">🌤 天气</span><span class="tag">🐾 宠物</span>
+      <span class="tag">📊 日志</span><span class="tag">🏆 成就</span>
+    </div>
+  </div>
+  <div id="content"></div>
+</div>
+
+<script>
+// ===================== GAME ENGINE (Pure JS, no backend) =====================
+
+// -- Character classes --
+const CLASSES = {
+  warrior: {name:'战士',hp:120,maxHp:120,mp:40,maxMp:40,atk:15,def:12,spd:8,emoji:'⚔',color:'var(--warrior)',
+    lvlUp:{hp:15,mp:5,atk:3,def:3,spd:1}},
+  mage: {name:'法师',hp:70,maxHp:70,mp:100,maxMp:100,atk:20,def:5,spd:10,emoji:'🔮',color:'var(--mage)',
+    lvlUp:{hp:8,mp:15,atk:5,def:1,spd:1}},
+  ranger: {name:'游侠',hp:90,maxHp:90,mp:60,maxMp:60,atk:14,def:8,spd:15,emoji:'🏹',color:'var(--ranger)',
+    lvlUp:{hp:10,mp:8,atk:3,def:2,spd:2}},
+};
+
+// -- Enemies --
+const ENEMY_DEFS = {
+  '史莱姆': {hp:30,atk:5,def:2,spd:3,exp:10,emoji:'🟢',desc:'弱小的粘液怪'},
+  '哥布林': {hp:50,atk:10,def:5,spd:7,exp:25,emoji:'👺',desc:'狡猾的小恶魔'},
+  '暗黑骑士': {hp:100,atk:20,def:15,spd:10,exp:60,emoji:'🖤',desc:'堕落的骑士'},
+  '恶龙': {hp:200,atk:35,def:25,spd:12,exp:150,emoji:'🐉',desc:'远古恶龙'},
+};
+
+// -- Skills with cooldowns --
+const CLASS_SKILLS = {
+  Warrior: [
+    {id:'s1',name:'重击',desc:'1.5x伤害',mp:10,cd:2,dmgMult:1.5,type:'damage'},
+    {id:'s2',name:'战吼',desc:'回复20HP',mp:8,cd:4,dmgMult:0,type:'heal',healAmt:20},
+    {id:'s3',name:'铁壁',desc:'防御+8',mp:5,cd:3,dmgMult:0,type:'buff'},
+    {id:'s4',name:'旋风斩',desc:'2.0x伤害',mp:20,cd:5,dmgMult:2.0,type:'damage'},
+  ],
+  Mage: [
+    {id:'s1',name:'火球术',desc:'2.0x火属性',mp:15,cd:2,dmgMult:2.0,type:'damage',element:'fire'},
+    {id:'s2',name:'冰霜新星',desc:'1.8x冰属性',mp:18,cd:3,dmgMult:1.8,type:'damage',element:'ice'},
+    {id:'s3',name:'护盾',desc:'回复25HP',mp:12,cd:4,dmgMult:0,type:'heal',healAmt:25},
+    {id:'s4',name:'陨石术',desc:'3.0x伤害',mp:30,cd:6,dmgMult:3.0,type:'damage'},
+  ],
+  Ranger: [
+    {id:'s1',name:'连射',desc:'2x0.8伤害',mp:12,cd:2,dmgMult:0.8,type:'multi',hits:2},
+    {id:'s2',name:'毒箭',desc:'1.5x+持续',mp:10,cd:3,dmgMult:1.5,type:'damage'},
+    {id:'s3',name:'闪避',desc:'回复15HP',mp:8,cd:3,dmgMult:0,type:'heal',healAmt:15},
+    {id:'s4',name:'暴雨箭',desc:'3x0.7伤害',mp:25,cd:5,dmgMult:0.7,type:'multi',hits:3},
+  ],
+};
+
+// -- Weather --
+const WEATHERS = [
+  {id:'clear',display:'晴天',icon:'☀',desc:'阳光普照',effect:'无特殊效果',
+    fireMod:1,iceMod:1,lightningMod:1,windMod:1,accMod:1,critBonus:0},
+  {id:'rain',display:'雨天',icon:'🌧',desc:'大雨倾盆',effect:'火↓ 冰/雷↑ 命中↓',
+    fireMod:.7,iceMod:1.2,lightningMod:1.3,windMod:1,accMod:.9,critBonus:0},
+  {id:'storm',display:'雷暴',icon:'⛈',desc:'雷电交加',effect:'雷↑↑ 暴击↑ 命中↓',
+    fireMod:.5,iceMod:1,lightningMod:1.5,windMod:1,accMod:.85,critBonus:.15},
+  {id:'snow',display:'雪天',icon:'❄',desc:'大雪纷飞',effect:'冰↑ 火↓ 速度↓',
+    fireMod:.8,iceMod:1.3,lightningMod:1,windMod:1,accMod:1,critBonus:0},
+  {id:'fog',display:'雾天',icon:'🌫',desc:'浓雾弥漫',effect:'命中↓↓ 闪避↑',
+    fireMod:1,iceMod:1,lightningMod:1,windMod:1,accMod:.7,critBonus:0},
+  {id:'wind',display:'大风',icon:'🌪',desc:'狂风呼啸',effect:'风/火↑ 命中↓',
+    fireMod:1.2,iceMod:1,lightningMod:1,windMod:1.3,accMod:.9,critBonus:0},
+];
+
+// -- Combo rewards --
+const COMBO_MILESTONES = [
+  {threshold:5,msg:'连击x5！伤害+10%',bonusPct:10,gold:10,exp:5},
+  {threshold:10,msg:'连击x10！伤害+20%',bonusPct:20,gold:25,exp:15},
+  {threshold:15,msg:'连击x15！伤害+30%',bonusPct:30,gold:50,exp:30},
+  {threshold:20,msg:'连击x20！伤害+40%',bonusPct:40,gold:80,exp:50},
+  {threshold:30,msg:'连击x30！伤害+50%',bonusPct:50,gold:150,exp:100},
+];
+
+// -- Pet definitions --
+const PETS = {
+  Warrior: {name:'石甲龟',emoji:'🐢',atk:3,def:10,hp:30,skill:'岩石护盾',type:'defense'},
+  Mage: {name:'火精灵',emoji:'🔥',atk:10,def:3,hp:20,skill:'火焰吐息',type:'attack'},
+  Ranger: {name:'雷电鹰',emoji:'🦅',atk:12,def:4,hp:25,skill:'雷鸣俯冲',type:'attack'},
+};
+
+// -- Achievement defs --
+const ACHIEVEMENTS = [
+  {id:'first_win',name:'初次胜利',icon:'🏅',desc:'赢得第一场战斗'},
+  {id:'slayer',name:'怪物猎人',icon:'⚔',desc:'击败10个敌人'},
+  {id:'combo5',name:'连击新手',icon:'🔥',desc:'达成5连击'},
+  {id:'combo15',name:'连击大师',icon:'⚡',desc:'达成15连击'},
+  {id:'level5',name:'成长中',icon:'📈',desc:'达到5级'},
+  {id:'dragon',name:'屠龙者',icon:'🐉',desc:'击败恶龙'},
+];
+
+// ===================== GAME STATE =====================
+
+let G = {
+  player: null,     // {name,className,hp,maxHp,mp,maxMp,atk,def,spd,level,exp}
+  enemy: null,      // {name,hp,maxHp,atk,def,spd,exp}
+  state: 'idle',    // idle | battle | victory | defeat
+  turn: 0,
+  defending: false,
+  log: [],
+  maxLog: 50,
+  // Subsystems
+  weather: null,
+  cooldowns: {},    // skillId -> remaining turns
+  combo: {count:0, maxCombo:0, multiplier:1.0},
+  pet: null,
+  kills: 0,
+  achievements: [],
+};
+
+// ===================== GAME LOGIC =====================
+
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+
+function expToNext(level){return level*50}
+
+function createPlayer(cls){
+  const c = CLASSES[cls];
+  G.player = {name:c.name,className:cls,displayName:c.name,
+    hp:c.hp,maxHp:c.maxHp,mp:c.mp,maxMp:c.maxMp,
+    atk:c.atk,def:c.def,spd:c.spd,
+    level:1,exp:0};
+  G.state = 'idle'; G.turn = 0; G.log = [];
+  G.combo = {count:0,maxCombo:0,multiplier:1.0};
+  G.cooldowns = {};
+  G.kills = 0; G.achievements = [];
+  G.weather = null;
+  const petDef = PETS[c.name];
+  G.pet = {...petDef, level:1, exp:0, active:true};
+  addLog('welcome', `${c.emoji} ${c.name}开始了冒险之旅！`);
+}
+
+function startBattle(enemyName){
+  const def = ENEMY_DEFS[enemyName];
+  if(!def) return;
+  G.enemy = {name:enemyName, hp:def.hp, maxHp:def.hp, atk:def.atk, def:def.def, spd:def.spd, exp:def.exp};
+  G.state = 'battle'; G.turn = 0; G.defending = false;
+  G.combo = {count:0,maxCombo:0,multiplier:1.0};
+  G.cooldowns = {};
+  // Randomize weather
+  G.weather = WEATHERS[rand(0,WEATHERS.length-1)];
+  addLog('turn', `遭遇了 ${enemyName}！(HP:${def.hp} ATK:${def.atk} DEF:${def.def})`);
+  addLog('weather', `${G.weather.icon} 天气：${G.weather.display} — ${G.weather.effect}`);
+  if(G.pet) addLog('pet', `${G.pet.emoji} ${G.pet.name}准备战斗！`);
+}
+
+function calcDmg(atk,def){return Math.max(1, atk - def + rand(-2,2))}
+
+function tickCooldowns(){
+  const ready = [];
+  for(const sid in G.cooldowns){
+    G.cooldowns[sid]--;
+    if(G.cooldowns[sid] <= 0){delete G.cooldowns[sid]; ready.push(sid);}
+    else ready.push(null); // placeholder to know something ticked
+  }
+  return ready.filter(Boolean);
+}
+
+function getAvailableSkills(){
+  const skills = CLASS_SKILLS[G.player.displayName] || [];
+  return skills.filter(s => !G.cooldowns[s.id] && G.player.mp >= s.mp);
+}
+
+function addCombo(isAttack){
+  if(isAttack){
+    G.combo.count++;
+    if(G.combo.count > G.combo.maxCombo) G.combo.maxCombo = G.combo.count;
+    G.combo.multiplier = Math.min(2.0, 1.0 + G.combo.count * 0.05);
+    // Check milestones
+    for(const m of COMBO_MILESTONES){
+      if(G.combo.count === m.threshold){
+        addLog('combo', `🎯 ${m.msg}`);
+      }
+    }
+  } else {
+    if(G.combo.count > 0){
+      G.combo.count = 0;
+      G.combo.multiplier = 1.0;
+      addLog('combo', '连击中断！');
+    }
+  }
+}
+
+function breakComboMaybe(){
+  if(G.combo.count > 0 && Math.random() < 0.3){
+    G.combo.count = 0; G.combo.multiplier = 1.0;
+    addLog('combo', '连击被敌人打断！');
+  }
+}
+
+function petTurn(){
+  if(!G.pet || !G.pet.active || !G.enemy) return;
+  const isAtk = G.pet.type === 'attack';
+  if(isAtk){
+    const dmg = Math.max(1, G.pet.atk + rand(-1,2));
+    G.enemy.hp = Math.max(0, G.enemy.hp - dmg);
+    addLog('pet', `${G.pet.emoji} ${G.pet.name}攻击！造成 ${dmg} 伤害`);
+    // Pet extends combo
+    if(G.combo.count > 0){G.combo.count++; G.combo.multiplier = Math.min(2.0, 1.0 + G.combo.count*0.05);}
+  } else {
+    const heal = rand(5, 10);
+    G.player.hp = Math.min(G.player.maxHp, G.player.hp + heal);
+    addLog('pet', `${G.pet.emoji} ${G.pet.name}使用${G.pet.skill}！回复 ${heal} HP`);
+  }
+}
+
+function weatherTick(){
+  if(!G.weather) return;
+  const turns = G.turn;
+  const changeChance = turns >= 3 ? 0.3 : 0.1;
+  if(Math.random() < changeChance){
+    const old = G.weather;
+    let next;
+    do { next = WEATHERS[rand(0,WEATHERS.length-1)]; } while(next.id === old.id);
+    G.weather = next;
+    addLog('weather', `${next.icon} 天气变化：${old.display} → ${next.display}！${next.effect}`);
+  }
+}
+
+function checkAchievements(){
+  const earned = [];
+  if(G.kills === 1 && !G.achievements.includes('first_win')){G.achievements.push('first_win');earned.push('first_win');}
+  if(G.kills >= 10 && !G.achievements.includes('slayer')){G.achievements.push('slayer');earned.push('slayer');}
+  if(G.combo.maxCombo >= 5 && !G.achievements.includes('combo5')){G.achievements.push('combo5');earned.push('combo5');}
+  if(G.combo.maxCombo >= 15 && !G.achievements.includes('combo15')){G.achievements.push('combo15');earned.push('combo15');}
+  if(G.player.level >= 5 && !G.achievements.includes('level5')){G.achievements.push('level5');earned.push('level5');}
+  if(G.enemy && G.enemy.name === '恶龙' && G.state === 'victory' && !G.achievements.includes('dragon')){G.achievements.push('dragon');earned.push('dragon');}
+  for(const a of earned){
+    const ach = ACHIEVEMENTS.find(x=>x.id===a);
+    if(ach) addLog('victory', `🏆 成就解锁：${ach.icon} ${ach.name}（${ach.desc}）`);
+  }
+}
+
+function doAction(action){
+  if(G.state !== 'battle') return;
+
+  G.turn++;
+  addLog('turn', `--- 第 ${G.turn} 回合 ---`);
+  tickCooldowns();
+
+  // Player action
+  let playerDmg = 0;
+  if(action === 'attack'){
+    let dmg = calcDmg(G.player.atk, G.enemy.def);
+    // Combo bonus
+    if(G.combo.multiplier > 1.0){
+      const bonus = Math.floor(dmg * (G.combo.multiplier - 1.0));
+      dmg += bonus;
+    }
+    playerDmg = dmg;
+    G.enemy.hp = Math.max(0, G.enemy.hp - dmg);
+    addLog('dmg', `${G.player.name} 攻击了 ${G.enemy.name}，造成 ${dmg} 点伤害！`);
+    addCombo(true);
+  } else if(action === 'defend'){
+    G.defending = true;
+    addLog('heal', `${G.player.name} 进入防御姿态！防御力翻倍！`);
+    addCombo(false);
+  } else if(action === 'skill'){
+    const available = getAvailableSkills();
+    if(available.length === 0){
+      addLog('dmg', '所有技能冷却中！');
+      G.turn--;
+      render();
+      return;
+    }
+    // Use first available skill (or let user pick via skill slot click)
+    useSkill(available[0]);
+  }
+
+  // Check enemy death
+  if(G.enemy.hp <= 0){
+    victory(); return;
+  }
+
+  // Pet turn
+  petTurn();
+  if(G.enemy.hp <= 0){victory(); return;}
+
+  // Enemy turn
+  const defVal = G.defending ? G.player.def * 2 : G.player.def;
+  let eDmg = calcDmg(G.enemy.atk, defVal);
+  G.player.hp = Math.max(0, G.player.hp - eDmg);
+  addLog('dmg', `${G.enemy.name} 攻击了 ${G.player.name}，造成 ${eDmg} 点伤害！`);
+  G.defending = false;
+  if(eDmg > 0) breakComboMaybe();
+
+  // Check player death
+  if(G.player.hp <= 0){
+    defeat(); return;
+  }
+
+  // Weather tick
+  weatherTick();
+
+  render();
+}
+
+function useSkill(skill){
+  G.cooldowns[skill.id] = skill.cd;
+  G.player.mp -= skill.mp;
+
+  if(skill.type === 'damage'){
+    let dmg = Math.max(1, Math.floor(G.player.atk * skill.dmgMult) - G.enemy.def + rand(-2,2));
+    // Weather element modifier
+    if(skill.element === 'fire') dmg = Math.floor(dmg * (G.weather?.fireMod || 1));
+    if(skill.element === 'ice') dmg = Math.floor(dmg * (G.weather?.iceMod || 1));
+    if(skill.element === 'lightning') dmg = Math.floor(dmg * (G.weather?.lightningMod || 1));
+    G.enemy.hp = Math.max(0, G.enemy.hp - dmg);
+    addLog('dmg', `${G.player.name} 使用了 ${skill.name}！造成 ${dmg} 点伤害！`);
+    addCombo(true);
+  } else if(skill.type === 'heal'){
+    const heal = skill.healAmt || 20;
+    G.player.hp = Math.min(G.player.maxHp, G.player.hp + heal);
+    addLog('heal', `${G.player.name} 使用了 ${skill.name}！回复 ${heal} HP！`);
+    addCombo(true);
+  } else if(skill.type === 'multi'){
+    let total = 0;
+    for(let i=0;i<skill.hits;i++){
+      const dmg = Math.max(1, Math.floor(G.player.atk * skill.dmgMult) - G.enemy.def + rand(-2,2));
+      G.enemy.hp = Math.max(0, G.enemy.hp - dmg);
+      total += dmg;
+      if(G.enemy.hp <= 0) break;
+    }
+    addLog('dmg', `${G.player.name} 使用了 ${skill.name}！${skill.hits}次攻击共造成 ${total} 点伤害！`);
+    addCombo(true);
+  } else if(skill.type === 'buff'){
+    G.defending = true;
+    addLog('heal', `${G.player.name} 使用了 ${skill.name}！防御提升！`);
+    addCombo(true);
+  }
+}
+
+function victory(){
+  G.state = 'victory';
+  const exp = G.enemy.exp;
+  G.player.exp += exp;
+  G.kills++;
+  addLog('victory', `🏆 战斗胜利！获得 ${exp} 经验值！`);
+  // Level up
+  while(G.player.exp >= expToNext(G.player.level)){
+    G.player.exp -= expToNext(G.player.level);
+    G.player.level++;
+    const c = CLASSES[G.player.className];
+    const u = c.lvlUp;
+    G.player.maxHp += u.hp; G.player.hp = G.player.maxHp;
+    G.player.maxMp += u.mp; G.player.mp = G.player.maxMp;
+    G.player.atk += u.atk; G.player.def += u.def; G.player.spd += u.spd;
+    addLog('victory', `🎉 升级到 ${G.player.level} 级！HP:${G.player.maxHp} MP:${G.player.maxMp} ATK:${G.player.atk} DEF:${G.player.def}`);
+  }
+  // Combo rewards
+  if(G.combo.maxCombo >= 5){
+    let bonusGold=0, bonusExp=0;
+    for(const m of COMBO_MILESTONES){
+      if(G.combo.maxCombo >= m.threshold){bonusGold+=m.gold;bonusExp+=m.exp;}
+    }
+    if(bonusGold||bonusExp) addLog('combo', `[连击奖励] 金币+${bonusGold} 经验+${bonusExp}！最大连击x${G.combo.maxCombo}`);
+  }
+  checkAchievements();
+  render();
+  showOverlay(true);
+}
+
+function defeat(){
+  G.state = 'defeat';
+  addLog('defeat', `💀 ${G.player.name} 被击败了...`);
+  render();
+  showOverlay(false);
+}
+
+function addLog(type, msg){
+  G.log.push({type,msg});
+  if(G.log.length > G.maxLog) G.log.shift();
+}
+
+// ===================== RENDERING =====================
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function bar(pct,cls,label,value){
+  return `<div class="bar-group"><div class="bar-label"><span>${label}</span><span>${value}</span></div>
+  <div class="bar"><div class="bar-fill ${cls}" style="width:${Math.max(0,Math.min(100,pct))}%"></div></div></div>`;
+}
+
+function playerPanel(){
+  const p = G.player; if(!p) return '';
+  const c = CLASSES[p.className];
+  return `<div class="panel">
+    <div class="char-header">
+      <div class="char-icon" style="background:${c.color}22;border:2px solid ${c.color}">${c.emoji}</div>
+      <div class="char-info">
+        <div class="char-name" style="color:${c.color}">${p.name}</div>
+        <div class="char-class">Lv.${p.level} ${p.displayName}</div>
+      </div>
+    </div>
+    ${bar(p.hp/p.maxHp*100,'hp','HP',`${p.hp}/${p.maxHp}`)}
+    ${bar(p.mp/p.maxMp*100,'mp','MP',`${p.mp}/${p.maxMp}`)}
+    ${bar(p.exp/expToNext(p.level)*100,'exp','EXP',`${p.exp}/${expToNext(p.level)}`)}
+    <div class="stats-row">
+      <span class="stat">ATK <span class="val">${p.atk}</span></span>
+      <span class="stat">DEF <span class="val">${p.def}</span></span>
+      <span class="stat">SPD <span class="val">${p.spd}</span></span>
+    </div>
+    ${G.pet ? `<div class="pet-display"><span style="font-size:20px">${G.pet.emoji}</span><div class="pet-info"><span class="pet-name">${G.pet.name}</span> Lv.${G.pet.level}</div></div>` : ''}
+  </div>`;
+}
+
+function skillSlots(){
+  const skills = CLASS_SKILLS[G.player?.displayName] || [];
+  return `<div class="skill-slots">${skills.map(s=>{
+    const cd = G.cooldowns[s.id];
+    const canUse = !cd && G.player.mp >= s.mp;
+    return `<div class="skill-slot ${canUse?'ready':'on-cd'}" ${canUse?`onclick="doAction('skill:${s.id}')"`:''}>`+
+      `<div class="sname">${s.name}</div>`+
+      `<div style="font-size:9px;color:var(--muted)">${s.desc}</div>`+
+      (cd ? `<div class="cd-txt">${cd}回合</div>` : '')+
+    `</div>`;
+  }).join('')}</div>`;
+}
+
+function render(){
+  const el = document.getElementById('content');
+  if(!G.player){
+    el.innerHTML = renderCreate(); return;
+  }
+  if(G.state === 'idle'){
+    el.innerHTML = `<div class="main-grid">${playerPanel()}${renderIdle()}</div>`;
+    return;
+  }
+  // Battle/Victory/Defeat
+  const e = G.enemy || {};
+  const w = G.weather || {};
+  el.innerHTML = `
+    <div class="main-grid">
+      ${playerPanel()}
+      <div class="panel enemy-panel">
+        <div class="panel-title">敌人</div>
+        <div class="enemy-sprite ${G.state==='victory'?'dead':''}" id="enemySprite">${ENEMY_DEFS[e.name]?.emoji||'👾'}</div>
+        <div class="enemy-name">${e.name||'???'}</div>
+        ${bar((e.hp||0)/(e.maxHp||1)*100,'enemy-hp','HP',`${Math.max(0,e.hp||0)}/${e.maxHp||0}`)}
+        <div class="stats-row">
+          <span class="stat">ATK <span class="val">${e.atk||0}</span></span>
+          <span class="stat">DEF <span class="val">${e.def||0}</span></span>
+        </div>
+        ${G.state==='battle' ? `
+          <div class="actions">
+            <button class="btn btn-attack" onclick="doAction('attack')">⚔ 攻击</button>
+            <button class="btn btn-defend" onclick="doAction('defend')">🛡 防御</button>
+          </div>
+          ${skillSlots()}
+        ` : `<div class="actions"><button class="btn btn-next" onclick="afterBattle()">${G.state==='victory'?'🏆 继续冒险':'💀 重新开始'}</button></div>`}
+      </div>
+    </div>
+    <div class="bottom-grid">
+      <div class="panel log-panel"><div class="panel-title">战斗日志</div>${renderLog()}</div>
+      <div>
+        <div class="info-grid">
+          <div class="info-box"><div class="label">天气</div>
+            <div class="weather-icon">${w.icon||'☀'}</div>
+            <div class="weather-name">${w.display||'晴天'}</div>
+            <div class="weather-effect">${w.effect||''}</div>
+          </div>
+          <div class="info-box"><div class="label">连击</div>
+            <div class="combo-count" id="comboCount">x${G.combo.count}</div>
+            <div class="combo-label">COMBO</div>
+            <div class="combo-mult">倍率 x${G.combo.multiplier.toFixed(2)}</div>
+          </div>
+          <div class="info-box"><div class="label">回合</div><div class="value">${G.turn}</div></div>
+          <div class="info-box"><div class="label">击杀</div><div class="value">${G.kills}</div></div>
+        </div>
+        ${G.achievements.length ? `<div style="margin-top:6px;font-size:10px;color:var(--combo)">🏆 ${G.achievements.length}个成就</div>` : ''}
+      </div>
+    </div>`;
+  // Scroll log
+  const logEl = document.querySelector('.log-panel');
+  if(logEl) logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderCreate(){
+  return `<div class="main-grid"><div class="panel create-screen">
+    <h2>选择你的职业</h2><p>开始冒险之旅</p>
+    <div class="class-cards">${Object.entries(CLASSES).map(([k,c])=>`
+      <div class="class-card" onclick="createPlayer('${k}')" style="border-color:${c.color}">
+        <div class="icon">${c.emoji}</div>
+        <div class="name" style="color:${c.color}">${c.name}</div>
+        <div class="desc">${c.hp>100?'高HP 高防御 近战之王':c.maxMp>80?'高MP 强力技能 远程输出':'均衡型 连射技能 灵活机动'}</div>
+        <div class="stats-preview">HP:${c.maxHp} MP:${c.maxMp}<br>ATK:${c.atk} DEF:${c.def} SPD:${c.spd}</div>
+      </div>`).join('')}
+    </div>
+  </div></div>`;
+}
+
+function renderIdle(){
+  return `<div class="panel">
+    <div class="panel-title">选择对手</div>
+    <div class="enemy-select">${Object.entries(ENEMY_DEFS).map(([name,e])=>`
+      <div class="enemy-btn" onclick="startBattle('${name}')">
+        <div class="emoji">${e.emoji}</div>
+        <div class="name">${name}</div>
+        <div class="stats">HP:${e.hp} ATK:${e.atk}<br>${e.desc}</div>
+      </div>`).join('')}
+    </div>
+    <div class="actions" style="margin-top:12px;justify-content:center">
+      <button class="btn btn-reset" onclick="G.player=null;G.state='idle';render()">重新选择</button>
+    </div>
+  </div>`;
+}
+
+function renderLog(){
+  return G.log.map(l=>`<div class="log-entry ${l.type}">${esc(l.msg)}</div>`).join('');
+}
+
+function showOverlay(isVictory){
+  const ov = document.createElement('div');
+  ov.className='overlay'; ov.id='overlay';
+  const rewardLogs = G.log.filter(l=>l.type==='victory'||l.type==='combo');
+  ov.innerHTML=`<div class="overlay-card ${isVictory?'victory':'defeat'}">
+    <h2>${isVictory?'🏆 战斗胜利！':'💀 战败...'}</h2>
+    <div class="rewards">${isVictory?rewardLogs.map(l=>`<div>${esc(l.msg)}</div>`).join(''):'<div>别灰心，再试一次！</div>'}</div>
+    <button class="btn btn-next" onclick="closeOverlay()">${isVictory?'继续冒险':'重新开始'}</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+function closeOverlay(){
+  const el=document.getElementById('overlay'); if(el)el.remove();
+  afterBattle();
+}
+
+function afterBattle(){
+  if(G.state==='defeat'){
+    G.player=null; G.enemy=null; G.state='idle'; G.log=[];
+    render(); return;
+  }
+  G.enemy=null; G.state='idle';
+  render();
+}
+
+// Override doAction to support skill:id format
+const _doAction = doAction;
+doAction = function(action){
+  if(action.startsWith('skill:')){
+    const sid = action.split(':')[1];
+    const skills = CLASS_SKILLS[G.player?.displayName] || [];
+    const skill = skills.find(s=>s.id===sid);
+    if(!skill||G.cooldowns[skill.id]||G.player.mp<skill.mp) return;
+
+    G.turn++;
+    addLog('turn', `--- 第 ${G.turn} 回合 ---`);
+    tickCooldowns();
+    useSkill(skill);
+
+    if(G.enemy.hp <= 0){victory(); return;}
+    petTurn();
+    if(G.enemy.hp <= 0){victory(); return;}
+    const defVal = G.defending ? G.player.def*2 : G.player.def;
+    const eDmg = calcDmg(G.enemy.atk, defVal);
+    G.player.hp = Math.max(0, G.player.hp - eDmg);
+    addLog('dmg', `${G.enemy.name} 攻击了 ${G.player.name}，造成 ${eDmg} 点伤害！`);
+    G.defending = false;
+    if(eDmg>0) breakComboMaybe();
+    if(G.player.hp <= 0){defeat(); return;}
+    weatherTick();
+    render();
+    return;
+  }
+  _doAction(action);
+};
+
+// Init
+render();
+</script>
+</body>
+</html>
