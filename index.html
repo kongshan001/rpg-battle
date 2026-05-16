@@ -291,6 +291,7 @@ function createPlayer(cls){
   const petDef = PETS[c.name];
   G.pet = {...petDef, level:1, exp:0, active:true};
   addLog('welcome', `${c.emoji} ${c.name}开始了冒险之旅！`);
+  render();
 }
 
 function startBattle(enemyName){
